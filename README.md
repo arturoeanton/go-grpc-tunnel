@@ -31,9 +31,10 @@ El sistema consta de dos componentes principales:
 
 **Flujo de Datos (Ejemplo Firebird):**
 
-    ```
+ ```text
 [Cliente Firebird App] <---TCP---> [Servidor Túnel (IP_Publica:8080)] <---gRPC/TLS (Internet)---> [Agente Túnel (Red Local)] <---TCP---> [Servidor Firebird Real (localhost:3050)]
-```
+   ```
+
 ## Prerrequisitos
 
 * **Go:** Versión 1.18 o superior recomendada.
