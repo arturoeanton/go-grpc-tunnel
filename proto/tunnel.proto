@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package tunnel;
+
+option go_package = "github.com/arturoeanton/go-grpc-tunnel/tunnel/proto"; // Ajusta a tu repo
+
+// Servicio principal para el túnel
+service TunnelService {
+  // RPC bidireccional para establecer y mantener la conexión de control
+  // y para transportar datos de conexiones Firebird multiplexadas.
+  // El cliente (agente junto a Firebird DB) inicia esta conexión.
+  // El servidor (expuesto) puede enviar mensajes para iniciar túneles de datos.
+  rpc ConnectControl(stream Frame) returns (stream Frame);
+
+  // Podríamos tener un RPC separado para datos, pero usar uno solo
+  // simplifica el manejo de la conexión subyacente.
+  // La diferenciación entre control y datos se hará con el contenido del Frame.
+}
+
+// Define los tipos de frames para distinguir control de datos.
+enum FrameType {
+  UNKNOWN = 0;
+  CONTROL_INIT = 1;     // Primer mensaje del cliente al servidor con metadata (token)
+  CONTROL_ACK = 2;      // Respuesta del servidor al CONTROL_INIT
+  DATA = 3;             // Frame de datos para una conexión Firebird específica
+  START_DATA_TUNNEL = 4; // Mensaje del servidor al cliente para iniciar un túnel
+  TUNNEL_READY = 5;     // Mensaje del cliente al servidor indicando que el túnel TCP a FB está listo
+  CLOSE_TUNNEL = 6;     // Mensaje para cerrar un túnel específico (por error o fin normal)
+  ERROR = 7;            // Mensaje de error general o específico del túnel
+}
+
+// Mensaje que se intercambia en el stream.
+message Frame {
+  FrameType type = 1;
+  string connection_id = 2; // Identificador único para cada túnel de datos Firebird
+  bytes payload = 3;        // Datos binarios (ej. tráfico TCP de Firebird)
+  map<string, string> metadata = 4; // Metadatos opcionales (ej. token en CONTROL_INIT, mensaje de error)
+}
