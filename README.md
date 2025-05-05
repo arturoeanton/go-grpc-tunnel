@@ -164,6 +164,8 @@ La comunicación entre el servidor y el agente se define usando Protocol Buffers
 * **TLS en Extremos:** Añadir opción para que el servidor escuche conexiones de clientes finales con TLS y/o que el agente conecte al servicio final (Firebird) usando TLS (si el servicio lo soporta).
 
 
+## Levantar firebird en docker para probar los scripts 
+
     ```bash
     docker run -d --name firebird25ss -p 30505:3050 -d -e ISC_PASSWORD=masterkey jacobalberty/firebird
     docker exec -it firebird25ss /bin/bash
@@ -174,3 +176,6 @@ La comunicación entre el servidor y el agente se define usando Protocol Buffers
     quit;
     ```
 
+  ```
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+   ```
