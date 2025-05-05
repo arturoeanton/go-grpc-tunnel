@@ -163,3 +163,14 @@ La comunicación entre el servidor y el agente se define usando Protocol Buffers
 * **Configuración por Archivo:** Usar archivos de configuración (ej. YAML, TOML) además/en lugar de variables de entorno.
 * **TLS en Extremos:** Añadir opción para que el servidor escuche conexiones de clientes finales con TLS y/o que el agente conecte al servicio final (Firebird) usando TLS (si el servicio lo soporta).
 
+
+    ```bash
+    docker run -d --name firebird25ss -p 30505:3050 -d -e ISC_PASSWORD=masterkey jacobalberty/firebird
+    docker exec -it firebird25ss /bin/bash
+    cd /usr/local/firebird/bin/
+    ./isql -u SYSDBA -p masterkey /firebird/data/mi_base.fdb
+    CREATE DATABASE '/firebird/data/mi_base.fdb' USER 'SYSDBA' PASSWORD 'masterkey';
+    exit;
+    quit;
+    ```
+
