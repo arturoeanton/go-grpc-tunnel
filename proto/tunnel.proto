@@ -31,8 +31,19 @@ enum FrameType {
 
 // Mensaje que se intercambia en el stream.
 message Frame {
+  reserved 10 to 19;    // Reserved for future extensions
+  
   FrameType type = 1;
   string connection_id = 2; // Identificador único para cada túnel de datos Firebird
   bytes payload = 3;        // Datos binarios (ej. tráfico TCP de Firebird)
   map<string, string> metadata = 4; // Metadatos opcionales (ej. token en CONTROL_INIT, mensaje de error)
+  
+  // Performance optimization fields (optional, backward compatible)
+  optional int64 timestamp = 5;        // Unix timestamp for debugging/monitoring
+  optional uint32 sequence_number = 6; // For ordering/deduplication
+  optional bool compressed = 7;        // Hint for compression
+  
+  // Strongly typed metadata alternatives (more efficient than map)
+  optional string error_message = 8;   // Direct error message (replaces metadata["error"])
+  optional string close_reason = 9;    // Close reason (replaces metadata["reason"])
 }

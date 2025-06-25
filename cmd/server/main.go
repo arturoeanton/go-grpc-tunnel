@@ -179,11 +179,19 @@ func (s *tunnelServer) handleAgentFrame(frame *pb.Frame) {
 		}
 
 	case pb.FrameType_CLOSE_TUNNEL:
-		log.Printf("Received CLOSE_TUNNEL for %s from agent. Reason: %s", frame.ConnectionId, frame.Metadata["error"])
+		reason := frame.GetOptimizedCloseReason()
+		if reason == "" {
+			reason = frame.Metadata["error"] // fallback for compatibility
+		}
+		log.Printf("Received CLOSE_TUNNEL for %s from agent. Reason: %s", frame.ConnectionId, reason)
 		s.closeTunnel(frame.ConnectionId, "Closed by agent") // Cierra el túnel del lado del servidor
 
 	case pb.FrameType_ERROR:
-		log.Printf("Received ERROR for tunnel %s from agent: %s", frame.ConnectionId, frame.Metadata["message"])
+		errorMsg := frame.GetOptimizedErrorMessage()
+		if errorMsg == "" {
+			errorMsg = frame.Metadata["message"] // fallback for compatibility
+		}
+		log.Printf("Received ERROR for tunnel %s from agent: %s", frame.ConnectionId, errorMsg)
 		s.closeTunnel(frame.ConnectionId, "Error reported by agent") // Cierra el túnel
 
 	default:
@@ -236,11 +244,7 @@ func (s *tunnelServer) closeTunnel(connID string, reason string) {
 	// Notificar al agente para que cierre su lado (si el agente no fue quien inició el cierre)
 	// Evita enviar CLOSE si la razón fue "Closed by agent" o similar
 	if reason != "Closed by agent" && reason != "Failed to send to agent" {
-		err := s.sendFrameToAgent(&pb.Frame{
-			Type:         pb.FrameType_CLOSE_TUNNEL,
-			ConnectionId: connID,
-			Metadata:     map[string]string{"reason": reason},
-		})
+		err := s.sendFrameToAgent(pb.NewCloseFrame(connID, reason))
 		if err != nil {
 			log.Printf("Failed to send CLOSE_TUNNEL notification to agent for %s: %v", connID, err)
 		}
@@ -298,11 +302,7 @@ func (s *tunnelServer) handleFirebirdConnection(fbConn net.Conn) {
 
 	// 1. Notificar al agente para que inicie el túnel TCP hacia Firebird DB
 	log.Printf("Requesting agent to start data tunnel for %s", connID)
-	err := s.sendFrameToAgent(&pb.Frame{
-		Type:         pb.FrameType_START_DATA_TUNNEL,
-		ConnectionId: connID,
-		// Podríamos pasar metadata adicional si fuera necesario (ej. IP origen)
-	})
+	err := s.sendFrameToAgent(pb.NewStartTunnelFrame(connID))
 	if err != nil {
 		log.Printf("Failed to send START_DATA_TUNNEL to agent for %s: %v", connID, err)
 		// closeTunnel se llamará en el defer
@@ -352,11 +352,7 @@ func (s *tunnelServer) handleFirebirdConnection(fbConn net.Conn) {
 				}
 				if n > 0 {
 					// Enviar los datos al agente
-					sendErr := s.sendFrameToAgent(&pb.Frame{
-						Type:         pb.FrameType_DATA,
-						ConnectionId: connID,
-						Payload:      buffer[:n],
-					})
+					sendErr := s.sendFrameToAgent(pb.NewDataFrame(connID, buffer[:n]))
 					if sendErr != nil {
 						log.Printf("Error sending DATA frame to agent for tunnel %s: %v", connID, sendErr)
 						// El error de envío probablemente significa que el agente se cayó

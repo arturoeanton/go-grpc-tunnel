@@ -275,15 +275,15 @@ func (a *tunnelAgent) handleServerFrame(frame *pb.Frame) {
 		} else {
 			log.Printf("Received DATA for unknown or closed tunnel ID: %s. Sending CLOSE.", frame.ConnectionId)
 			// Notificar al servidor que este túnel no existe/está cerrado aquí
-			a.sendFrameToServer(&pb.Frame{
-				Type:         pb.FrameType_CLOSE_TUNNEL,
-				ConnectionId: frame.ConnectionId,
-				Metadata:     map[string]string{"error": "Tunnel not found or already closed"},
-			})
+			a.sendFrameToServer(pb.NewCloseFrame(frame.ConnectionId, "Tunnel not found or already closed"))
 		}
 
 	case pb.FrameType_CLOSE_TUNNEL:
-		log.Printf("Received CLOSE_TUNNEL for %s from server. Reason: %s", frame.ConnectionId, frame.Metadata["reason"])
+		reason := frame.GetOptimizedCloseReason()
+		if reason == "" {
+			reason = frame.Metadata["reason"] // fallback for compatibility
+		}
+		log.Printf("Received CLOSE_TUNNEL for %s from server. Reason: %s", frame.ConnectionId, reason)
 		a.closeLocalTunnel(frame.ConnectionId, "Closed by server")
 
 	default:
@@ -312,16 +312,8 @@ func (a *tunnelAgent) startLocalFirebirdTunnel(connID string) {
 	if err != nil {
 		log.Printf("Tunnel %s: Failed to connect to local Firebird: %v", connID, err)
 		// Notificar al servidor sobre el error
-		a.sendFrameToServer(&pb.Frame{
-			Type:         pb.FrameType_ERROR,
-			ConnectionId: connID,
-			Metadata:     map[string]string{"message": fmt.Sprintf("Failed to connect to local Firebird: %v", err)},
-		})
-		a.sendFrameToServer(&pb.Frame{ // También enviar CLOSE
-			Type:         pb.FrameType_CLOSE_TUNNEL,
-			ConnectionId: connID,
-			Metadata:     map[string]string{"error": "Failed to connect to local Firebird"},
-		})
+		a.sendFrameToServer(pb.NewErrorFrame(connID, fmt.Sprintf("Failed to connect to local Firebird: %v", err)))
+		a.sendFrameToServer(pb.NewCloseFrame(connID, "Failed to connect to local Firebird"))
 		return
 	}
 	log.Printf("Tunnel %s: Connected to local Firebird.", connID)
@@ -345,10 +337,7 @@ func (a *tunnelAgent) startLocalFirebirdTunnel(connID string) {
 
 	// 2. Notificar al servidor que el túnel está listo
 	log.Printf("Tunnel %s: Sending TUNNEL_READY to server.", connID)
-	err = a.sendFrameToServer(&pb.Frame{
-		Type:         pb.FrameType_TUNNEL_READY,
-		ConnectionId: connID,
-	})
+	err = a.sendFrameToServer(pb.NewTunnelReadyFrame(connID))
 	if err != nil {
 		log.Printf("Tunnel %s: Failed to send TUNNEL_READY: %v. Closing tunnel.", connID, err)
 		// No necesitamos notificar al servidor con CLOSE_TUNNEL aquí porque el servidor
@@ -378,21 +367,13 @@ func (a *tunnelAgent) startLocalFirebirdTunnel(connID string) {
 						log.Printf("Tunnel %s: Local Firebird connection closed (EOF or closed).", connID)
 					}
 					// Notificar al servidor que cerramos de este lado
-					a.sendFrameToServer(&pb.Frame{
-						Type:         pb.FrameType_CLOSE_TUNNEL,
-						ConnectionId: connID,
-						Metadata:     map[string]string{"error": reason},
-					})
+					a.sendFrameToServer(pb.NewCloseFrame(connID, reason))
 					cancel() // Cancela el contexto de este túnel para detener la otra goroutine (si hubiera)
 					return   // Termina esta goroutine
 				}
 				if n > 0 {
 					// Enviar datos al servidor gRPC
-					sendErr := a.sendFrameToServer(&pb.Frame{
-						Type:         pb.FrameType_DATA,
-						ConnectionId: connID,
-						Payload:      buffer[:n],
-					})
+					sendErr := a.sendFrameToServer(pb.NewDataFrame(connID, buffer[:n]))
 					if sendErr != nil {
 						log.Printf("Tunnel %s: Error sending DATA frame to server: %v", connID, sendErr)
 						// Si falla el envío, probablemente el stream principal cayó.
@@ -430,11 +411,7 @@ func (a *tunnelAgent) closeLocalTunnel(connID string, reason string) {
 		}
 		// Notificar al servidor SI el cierre no fue iniciado por el servidor
 		if reason != "Closed by server" {
-			err := a.sendFrameToServer(&pb.Frame{
-				Type:         pb.FrameType_CLOSE_TUNNEL,
-				ConnectionId: connID,
-				Metadata:     map[string]string{"error": reason},
-			})
+			err := a.sendFrameToServer(pb.NewCloseFrame(connID, reason))
 			if err != nil {
 				log.Printf("Failed to send CLOSE_TUNNEL notification to server for %s: %v", connID, err)
 			}
